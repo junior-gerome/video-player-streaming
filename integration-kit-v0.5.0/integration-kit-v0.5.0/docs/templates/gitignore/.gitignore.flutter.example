@@ -1,0 +1,56 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+
+# For Flutter apps, pubspec.lock should generally be committed.
+# For Flutter packages, decide by ADR if needed.
+# pubspec.lock
+
+# Android generated
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+
+# iOS generated
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Runner.xcworkspace/
+ios/build/
+*.xcuserstate
+*.xcuserdata/
+
+# Desktop generated
+macos/Flutter/ephemeral/
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# OS
+.DS_Store
+Thumbs.db

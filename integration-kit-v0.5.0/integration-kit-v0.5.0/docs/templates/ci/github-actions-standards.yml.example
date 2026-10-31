@@ -1,0 +1,11 @@
+# .github/workflows/standards.yml — runner Windows
+name: standards
+on: [pull_request]
+jobs:
+  check-standards:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Standards du kit
+        shell: cmd
+        run: scripts\check-standards.bat .

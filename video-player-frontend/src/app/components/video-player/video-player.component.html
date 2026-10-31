@@ -1,0 +1,546 @@
+<div class="w-full bg-surface-950 min-h-screen text-zinc-100">
+  <div class="flex max-w-[1680px] mx-auto min-h-screen">
+    <!-- Zone Principale du Lecteur Vidéo -->
+    <div class="flex-1 min-w-0 p-6 lg:p-8 flex flex-col justify-start">
+      <!-- Conteneur Vidéo avec Coins Arrondis Studio et Bordure Subtile -->
+      <div
+        class="relative w-full bg-black rounded-2xl overflow-hidden aspect-video shadow-2xl border border-white/[0.07] select-none"
+        id="video-container"
+        (mousemove)="onMouseMove()"
+        (dblclick)="toggleFullscreen()">
+
+        <video
+          #videoElement
+          [src]="getStreamUrl(currentVideo?.id ?? 0)"
+          [poster]="posterImage || ''"
+          preload="auto"
+          class="w-full h-full block bg-black object-contain cursor-pointer"
+          (loadedmetadata)="onLoadedMetadata()"
+          (loadeddata)="onLoadedData()"
+          (timeupdate)="onTimeUpdate()"
+          (waiting)="onWaiting()"
+          (stalled)="onStalled()"
+          (playing)="onPlaying()"
+          (canplay)="onCanPlay()"
+          (progress)="onProgress()"
+          (seeking)="onSeeking()"
+          (seeked)="onSeeked()"
+          (error)="onError()"
+          (ended)="onEnded()"
+          (click)="togglePlay()"
+          [controls]="false">
+        </video>
+
+        <audio #dubAudioElement class="hidden" (error)="onDubAudioError($event)"></audio>
+        <audio #segmentAudioElement class="hidden"></audio>
+
+        <!-- Overlay Central de Pause / Lecture -->
+        <div
+          class="absolute inset-0 flex items-center justify-center bg-black/35 backdrop-blur-[1px] z-[5] cursor-pointer transition-opacity"
+          *ngIf="!isPlaying"
+          (click)="togglePlay()">
+          <div class="w-20 h-20 rounded-full bg-white/15 backdrop-blur-md border border-white/25 flex items-center justify-center text-white shadow-2xl hover:scale-110 active:scale-95 transition-all">
+            <svg viewBox="0 0 24 24" width="36" height="36" class="ml-1" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Indicateur de Tampon / Buffering -->
+        <div
+          class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40 backdrop-blur-sm z-[6] pointer-events-none"
+          *ngIf="bufferingVisible && isPlaying && !playerError">
+          <div class="w-10 h-10 border-2 border-white/20 border-t-brand-red rounded-full animate-spin"></div>
+          <span class="text-zinc-200 text-xs font-medium tracking-wide">
+            {{ isResyncing ? 'Synchronisation du flux…' : 'Chargement du tampon…' }}
+          </span>
+        </div>
+
+        <!-- Erreur de lecture avec bouton de recharge -->
+        <div class="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 backdrop-blur-md z-[7] p-6 text-center" *ngIf="playerError">
+          <div class="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mb-1">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+          </div>
+          <p class="text-zinc-200 text-sm m-0 max-w-md">Le flux vidéo n'a pas pu être synchronisé ou a été interrompu.</p>
+          <button
+            class="bg-brand-red hover:bg-brand-dark text-white border-none px-5 py-2 rounded-full text-xs font-medium cursor-pointer transition-all shadow-sm shadow-brand-red/20"
+            (click)="reloadVideo()">
+            Recharger la vidéo
+          </button>
+        </div>
+
+        <!-- Barre de Contrôles Flottante Épurée -->
+        <div
+          class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent px-5 pb-5 pt-16 z-10 opacity-100 transition-opacity duration-300"
+          *ngIf="showControls">
+
+          <!-- Ligne de Progression / Timeline Scrubber avec Tampon de Doublage Glissant -->
+          <div class="mb-3">
+            <div class="relative w-full flex items-center h-4 cursor-pointer">
+              <!-- Slider Scrubber Vidéo -->
+              <input
+                type="range"
+                class="seek-slider w-full relative z-20 bg-transparent"
+                [style.background]="seekTrackStyle"
+                [min]="0"
+                [max]="duration || 0"
+                [value]="currentTime"
+                (input)="seekTo($event)">
+
+              <!-- Fine barre matérialisant la zone tampon de doublage générée en avance (20 à 30s) -->
+              <div
+                *ngIf="dubActive && activeTrack !== 'vo' && dubBufferWidthPercent > 0"
+                class="absolute z-10 top-[6px] h-1 rounded-full pointer-events-none transition-all duration-300 bg-gradient-to-r from-sky-400 to-blue-500 opacity-90"
+                [style.left.%]="dubBufferLeftPercent"
+                [style.width.%]="dubBufferWidthPercent"
+                [title]="'Tampon de doublage généré en avance : +' + dubBufferAhead.toFixed(1) + 's'">
+              </div>
+            </div>
+
+            <div class="text-zinc-300 text-[11px] font-mono tabular-nums mt-1.5 flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="text-zinc-100 font-medium">{{ formatTime(currentTime) }}</span>
+                <span class="text-zinc-600">/</span>
+                <span class="text-zinc-400">{{ formatTime(duration) }}</span>
+              </div>
+
+              <!-- Monitoring du tampon vidéo et tampon de doublage en streaming -->
+              <div class="flex items-center gap-2.5">
+                <span
+                  class="text-sky-300 font-mono text-[10px] font-medium flex items-center gap-1.5 bg-sky-950/70 border border-sky-500/40 px-2 py-0.5 rounded-full shadow-sm"
+                  *ngIf="dubActive && activeTrack !== 'vo' && dubBufferAhead > 0">
+                  <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-sky-400"></span>
+                  </span>
+                  <span>Tampon doublage : +{{ dubBufferAhead.toFixed(0) }}s</span>
+                  <span class="text-sky-300/70 font-normal" *ngIf="liveSegmentsList.length > 0">({{ liveSegmentsList.length }} répliques)</span>
+                </span>
+
+                <span class="text-zinc-500 font-normal" *ngIf="bufferPercent > 0">
+                  tampon vidéo {{ bufferPercent.toFixed(0) }}%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ligne des Commandes Inférieures -->
+          <div class="flex items-center justify-between">
+            <!-- Groupe Gauche : Play, Saut, Volume, Piste Audio -->
+            <div class="flex items-center gap-1 sm:gap-2">
+              <button
+                class="bg-transparent border-none text-white cursor-pointer p-2 rounded-full hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center"
+                (click)="togglePlay()"
+                [title]="isPlaying ? 'Pause' : 'Lecture'">
+                <svg *ngIf="!isPlaying" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg *ngIf="isPlaying" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </button>
+
+              <button
+                class="bg-transparent border-none text-zinc-300 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                (click)="previousVideo()"
+                *ngIf="currentIndex > 0"
+                title="Vidéo précédente">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                </svg>
+              </button>
+
+              <button
+                class="bg-transparent border-none text-zinc-300 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                (click)="skip(-10)"
+                title="Reculer de 10s">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                </svg>
+              </button>
+
+              <button
+                class="bg-transparent border-none text-zinc-300 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                (click)="skip(10)"
+                title="Avancer de 10s">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
+                </svg>
+              </button>
+
+              <button
+                class="bg-transparent border-none text-zinc-300 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                (click)="nextVideo()"
+                *ngIf="currentIndex < videos.length - 1"
+                title="Vidéo suivante">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/>
+                </svg>
+              </button>
+
+              <!-- Contrôle du Volume Élégant -->
+              <div class="flex items-center gap-1 ml-1 group/vol">
+                <button
+                  class="bg-transparent border-none text-zinc-300 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                  (click)="toggleMute()"
+                  [title]="isMuted ? 'Rétablir le son' : 'Couper le son'">
+                  <svg *ngIf="!isMuted" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                  </svg>
+                  <svg *ngIf="isMuted" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" class="text-rose-400">
+                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                  </svg>
+                </button>
+                <input
+                  type="range"
+                  class="volume-slider"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  [value]="volume"
+                  (input)="onVolumeChange($event)">
+              </div>
+
+              <!-- Menu des Pistes Audio & Options de Doublage -->
+              <div class="relative ml-2">
+                <button
+                  class="bg-surface-900/90 border border-white/[0.1] text-zinc-200 text-xs px-3 py-1.5 rounded-full cursor-pointer transition-all hover:border-brand-red/50 hover:text-white flex items-center gap-2 active:scale-95"
+                  [title]="'Piste audio : ' + getActiveTrackLabel()"
+                  (click)="showAudioMenu = !showAudioMenu; showSpeedMenu = false">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" class="text-brand-light">
+                    <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                  </svg>
+                  <span class="font-medium">{{ getActiveTrackLabel() }}</span>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" class="text-zinc-500">
+                    <path d="M7 10l5 5 5-5z"/>
+                  </svg>
+                </button>
+
+                <!-- Dropdown Popover des Pistes Audio -->
+                <div
+                  class="absolute bottom-full left-0 mb-3 bg-surface-900/95 backdrop-blur-xl rounded-2xl py-2.5 min-w-[300px] shadow-2xl border border-white/[0.12] z-[100] animate-in fade-in zoom-in-95 duration-150"
+                  *ngIf="showAudioMenu">
+
+                  <div class="px-3.5 py-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider border-b border-white/[0.06] mb-1.5 flex justify-between items-center">
+                    <span>Pistes Audio & Doublage</span>
+                    <span class="text-[9px] bg-brand-red/15 text-brand-light px-2 py-0.5 rounded-full font-mono border border-brand-red/25">WebSocket Live</span>
+                  </div>
+
+                  <!-- Options avancées : Demucs & Clonage de voix -->
+                  <div class="px-3.5 py-2.5 bg-white/[0.02] border-b border-white/[0.06] space-y-2 mb-1.5">
+                    <label class="flex items-center justify-between cursor-pointer text-xs text-zinc-300 hover:text-white select-none">
+                      <span class="flex items-center gap-2">
+                        <span>🎵</span>
+                        <span>Conserver musique (Demucs)</span>
+                      </span>
+                      <input type="checkbox" [(ngModel)]="demucsEnabled" class="rounded bg-surface-800 border-white/20 text-brand-red focus:ring-0 cursor-pointer w-4 h-4" />
+                    </label>
+                    <label class="flex items-center justify-between cursor-pointer text-xs text-zinc-300 hover:text-white select-none">
+                      <span class="flex items-center gap-2">
+                        <span>🎙️</span>
+                        <span>Clonage voix (Zero-Shot)</span>
+                      </span>
+                      <input type="checkbox" [(ngModel)]="cloneVoiceEnabled" class="rounded bg-surface-800 border-white/20 text-brand-red focus:ring-0 cursor-pointer w-4 h-4" />
+                    </label>
+                  </div>
+
+                  <!-- VO / Piste Originale -->
+                  <button
+                    (click)="selectAudioTrack('vo')"
+                    class="flex items-center gap-3 w-full px-3.5 py-2 bg-transparent border-none text-zinc-200 cursor-pointer text-left hover:bg-white/[0.06] transition-colors"
+                    [class.text-brand-light]="activeTrack === 'vo' || !dubActive">
+                    <svg *ngIf="activeTrack === 'vo' || !dubActive" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" class="flex-shrink-0 text-brand-light">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                    <svg *ngIf="activeTrack !== 'vo' && dubActive" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" class="flex-shrink-0 opacity-20">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    </svg>
+                    <span class="flex-1">
+                      <span class="block text-xs font-medium">VO — Piste originale</span>
+                      <span class="block text-[10px] text-zinc-500">Audio direct de la vidéo source</span>
+                    </span>
+                  </button>
+
+                  <!-- Langues supportées (FR, DE, ES, IT) -->
+                  <ng-container *ngFor="let lang of supportedLanguages">
+                    <button
+                      *ngIf="isReady(lang.code)"
+                      (click)="selectAudioTrack(lang.code)"
+                      class="flex items-center gap-3 w-full px-3.5 py-2 bg-transparent border-none text-zinc-200 cursor-pointer text-left hover:bg-white/[0.06] transition-colors"
+                      [class.text-brand-light]="activeTrack === lang.code && dubActive">
+                      <svg *ngIf="activeTrack === lang.code && dubActive" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" class="flex-shrink-0 text-brand-light">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                      </svg>
+                      <svg *ngIf="!(activeTrack === lang.code && dubActive)" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" class="flex-shrink-0 opacity-20">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                      </svg>
+                      <span class="flex-1">
+                        <span class="block text-xs font-medium">{{ lang.flag }} {{ lang.label }}</span>
+                        <span class="block text-[10px]" [ngClass]="isStreaming(lang.code) ? 'text-amber-400 font-semibold' : 'text-emerald-400'">
+                          {{ isStreaming(lang.code) ? ('⚡ Streaming direct' + (getSegmentCount(lang.code) > 0 ? ' (' + getSegmentCount(lang.code) + ' répliques)' : '')) : 'Piste finalisée prête' }}
+                        </span>
+                      </span>
+                    </button>
+
+                    <!-- En cours de génération avant les premiers segments -->
+                    <button
+                      *ngIf="isGenerating(lang.code) && !isReady(lang.code)"
+                      class="flex items-center gap-3 w-full px-3.5 py-2 bg-transparent border-none text-brand-light text-left cursor-default">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" class="flex-shrink-0 animate-spin">
+                        <path d="M12 4V1L8 5l4 4V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/>
+                      </svg>
+                      <span class="flex-1">
+                        <span class="block text-xs font-medium">{{ lang.flag }} {{ lang.label }} (génération…)</span>
+                        <span class="block text-[10px] text-zinc-400">{{ getGenerationMessage(lang.code) }} — {{ getGenerationProgress(lang.code) }}%</span>
+                      </span>
+                    </button>
+
+                    <!-- Non encore généré -->
+                    <button
+                      *ngIf="!isReady(lang.code) && !isGenerating(lang.code)"
+                      (click)="selectAudioTrack(lang.code)"
+                      class="flex items-center gap-3 w-full px-3.5 py-2 bg-transparent border-none text-zinc-400 cursor-pointer text-left hover:bg-white/[0.06] hover:text-zinc-200 transition-colors">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" class="flex-shrink-0 opacity-30">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                      </svg>
+                      <span class="flex-1">
+                        <span class="block text-xs">{{ lang.flag }} {{ lang.label }}</span>
+                        <span class="block text-[10px] text-zinc-500">Lancer le doublage en direct</span>
+                      </span>
+                    </button>
+                  </ng-container>
+
+                  <!-- Gestionnaire de paquets hors-ligne Argos Translate -->
+                  <div class="px-2 pt-2 border-t border-white/[0.08] mt-1.5">
+                    <button
+                      (click)="openArgosModal()"
+                      class="w-full flex items-center justify-between px-3 py-2 bg-gradient-to-r from-sky-950/60 to-indigo-950/60 hover:from-sky-900/80 hover:to-indigo-900/80 border border-sky-500/30 text-sky-200 rounded-xl text-xs font-medium cursor-pointer transition-all shadow-sm">
+                      <span class="flex items-center gap-2">
+                        <span>📦</span>
+                        <span>Paquets Argos (.argosmodel)</span>
+                      </span>
+                      <span class="text-[9px] bg-sky-500/25 text-sky-300 font-mono px-2 py-0.5 rounded-full border border-sky-500/40">1-Clic</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Groupe Droite : Boucle, Vitesse, Resync, Plein Écran -->
+            <div class="flex items-center gap-1 sm:gap-1.5">
+              <!-- Mode boucle -->
+              <button
+                class="bg-transparent border-none cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                [class.text-brand-light]="loopMode !== 'none'"
+                [class.text-zinc-400]="loopMode === 'none'"
+                [title]="LOOP_LABELS[loopMode]"
+                (click)="cycleLoopMode()">
+                <svg *ngIf="loopMode === 'one'" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/>
+                </svg>
+                <svg *ngIf="loopMode !== 'one'" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                </svg>
+              </button>
+
+              <!-- Vitesse de lecture -->
+              <div class="relative">
+                <button
+                  class="bg-transparent border-none cursor-pointer px-2.5 py-1.5 rounded-full hover:bg-white/10 transition-colors"
+                  (click)="showSpeedMenu = !showSpeedMenu; showAudioMenu = false">
+                  <span class="text-zinc-200 text-xs font-mono font-medium">{{ playbackRate }}x</span>
+                </button>
+                <div
+                  class="absolute bottom-full right-0 mb-3 bg-surface-900/95 backdrop-blur-xl border border-white/[0.12] rounded-xl py-1 min-w-[72px] shadow-2xl z-[100]"
+                  *ngIf="showSpeedMenu">
+                  <button
+                    *ngFor="let r of [0.5, 0.75, 1, 1.25, 1.5, 2]"
+                    (click)="changeRate(r)"
+                    class="block w-full px-3 py-1.5 bg-transparent border-none text-zinc-300 hover:text-white hover:bg-white/10 text-xs font-mono cursor-pointer text-center transition-colors">
+                    {{ r }}x
+                  </button>
+                </div>
+              </div>
+
+              <!-- Resynchronisation -->
+              <button
+                class="bg-transparent border-none text-zinc-400 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                title="Resynchroniser le flux"
+                (click)="resyncVideo()">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                </svg>
+              </button>
+
+              <!-- Plein écran -->
+              <button
+                class="bg-transparent border-none text-zinc-400 hover:text-white cursor-pointer p-2 rounded-full hover:bg-white/10 transition-colors flex items-center justify-center"
+                (click)="toggleFullscreen()"
+                title="Plein écran">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Informations sur la vidéo en cours -->
+      <div class="py-5 text-white flex items-start justify-between gap-4 border-b border-white/[0.06]" *ngIf="currentVideo">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-3">
+            <h2 class="m-0 text-lg font-semibold tracking-tight text-zinc-100 truncate">{{ currentVideo.title }}</h2>
+            <span class="text-[11px] font-mono text-zinc-400 bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 rounded">
+              {{ formatSize(currentVideo.fileSize) }}
+            </span>
+          </div>
+          <p class="m-0 text-zinc-400 text-xs mt-1.5 line-clamp-2" *ngIf="currentVideo.description">{{ currentVideo.description }}</p>
+        </div>
+        <button
+          class="bg-surface-900 border border-white/[0.08] hover:border-white/[0.2] text-zinc-400 hover:text-white text-xs px-3 py-1.5 rounded-full cursor-pointer transition-all flex items-center gap-1.5"
+          (click)="close.emit()"
+          title="Fermer le lecteur">
+          <span>Fermer</span>
+          <span>✕</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tiroir Playlist Latéral Studio -->
+    <div
+      class="flex-[0_0_340px] border-l border-white/[0.07] px-5 py-6 h-screen overflow-y-auto bg-surface-950/60 backdrop-blur-md"
+      *ngIf="videos.length > 0">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+        <h3 class="text-zinc-100 font-semibold text-sm m-0">File de lecture</h3>
+        <span class="text-[11px] font-mono text-zinc-500">{{ videos.length }} élément{{ videos.length > 1 ? 's' : '' }}</span>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <div
+          class="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all border border-transparent hover:bg-white/[0.04]"
+          *ngFor="let video of videos; let i = index"
+          [ngClass]="video.id === currentVideo?.id ? 'bg-white/[0.08] border-white/[0.1] text-white' : 'text-zinc-400'"
+          (click)="onSelectVideo(video)">
+
+          <div
+            class="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-mono flex-shrink-0"
+            [ngClass]="video.id === currentVideo?.id ? 'bg-brand-red text-white' : 'bg-surface-800 text-zinc-500'">
+            {{ i + 1 }}
+          </div>
+
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-medium truncate" [class.text-white]="video.id === currentVideo?.id">
+              {{ video.title }}
+            </div>
+            <div class="text-[10px] text-zinc-500 font-mono mt-0.5">{{ formatSize(video.fileSize) }}</div>
+          </div>
+
+          <div class="text-brand-light flex-shrink-0" *ngIf="video.id === currentVideo?.id">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" class="animate-pulse">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Pré-téléchargement des Paquets Argos Translate (100% Hors Connexion) -->
+  <div
+    class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+    *ngIf="showArgosModal"
+    (click)="closeArgosModal()">
+
+    <div
+      class="bg-surface-900 border border-white/[0.15] rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 relative"
+      (click)="$event.stopPropagation()">
+
+      <!-- En-tête -->
+      <div class="flex items-start justify-between">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">📦</span>
+            <h3 class="text-base font-semibold text-white tracking-wide">Paquets Hors Connexion Argos Translate</h3>
+          </div>
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Téléchargez les fichiers <span class="font-mono text-sky-400">.argosmodel</span> pour traduire et doubler vos vidéos localement, même sans aucune connexion internet.
+          </p>
+        </div>
+        <button
+          class="text-zinc-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+          (click)="closeArgosModal()">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Action globale : Télécharger tout en 1 clic -->
+      <button
+        (click)="downloadAllArgosModels()"
+        [disabled]="isAllArgosInstalled || isDownloadingArgosAll"
+        class="w-full py-3 px-4 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-sky-950/40"
+        [ngClass]="isAllArgosInstalled
+          ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 cursor-default'
+          : 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white active:scale-[0.99]'">
+        <span *ngIf="isDownloadingArgosAll" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        <span *ngIf="!isDownloadingArgosAll && isAllArgosInstalled">✅</span>
+        <span *ngIf="!isDownloadingArgosAll && !isAllArgosInstalled">⚡</span>
+        <span>
+          {{ isAllArgosInstalled ? 'Tous les paquets sont en cache (Prêt hors-ligne)' : (isDownloadingArgosAll ? 'Téléchargement groupé en cours…' : 'Pré-télécharger tous les paquets en 1 clic') }}
+        </span>
+      </button>
+
+      <!-- Liste des Langues et Paquets -->
+      <div class="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+        <div
+          *ngFor="let model of argosModels"
+          class="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-between gap-3 hover:border-white/15 transition-colors">
+          <div class="space-y-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-white">{{ model.label }}</span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                [ngClass]="model.installed ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : (model.downloading ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30 animate-pulse' : 'bg-zinc-800 text-zinc-400 border border-zinc-700')">
+                {{ model.installed ? 'En cache local' : (model.downloading ? 'Téléchargement ' + model.progress + '%' : 'Non installé') }}
+              </span>
+            </div>
+            <div class="text-[10px] text-zinc-500 font-mono truncate">
+              {{ model.fileName }} — ~{{ model.sizeMb }} Mo
+            </div>
+            <!-- Barre de progression individuelle de téléchargement -->
+            <div class="w-full bg-zinc-800 h-1 rounded-full overflow-hidden mt-1.5" *ngIf="model.downloading">
+              <div class="bg-sky-400 h-full transition-all duration-300" [style.width.%]="model.progress"></div>
+            </div>
+          </div>
+
+          <button
+            (click)="downloadArgosModel(model.lang)"
+            [disabled]="model.installed || model.downloading"
+            class="flex-shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all"
+            [ngClass]="model.installed
+              ? 'bg-transparent text-emerald-400 cursor-default'
+              : (model.downloading
+                ? 'bg-sky-500/20 text-sky-300 cursor-wait'
+                : 'bg-white/10 hover:bg-sky-600 hover:text-white text-zinc-200 cursor-pointer border border-white/10')">
+            <span *ngIf="model.installed">Installé ✓</span>
+            <span *ngIf="model.downloading">En cours…</span>
+            <span *ngIf="!model.installed && !model.downloading">Télécharger</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-zinc-500">
+        <span>Stockage : <span class="font-mono text-zinc-400">dub-tmp/models/argos/</span></span>
+        <button
+          (click)="fetchArgosModels()"
+          class="text-zinc-400 hover:text-zinc-200 bg-transparent border-none cursor-pointer flex items-center gap-1">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 4V1L8 5l4 4V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+          <span>Actualiser</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,8 @@
+{
+  "@@locale": "en",
+  "appSlogan": "Your application tagline",
+  "save": "Save",
+  "cancel": "Cancel",
+  "loading": "Loading...",
+  "genericError": "An error occurred"
+}

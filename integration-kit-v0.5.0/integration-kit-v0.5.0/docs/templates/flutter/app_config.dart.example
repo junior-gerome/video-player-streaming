@@ -1,0 +1,37 @@
+import 'package:flutter/material.dart';
+
+class AppConfig {
+  const AppConfig({
+    required this.appName,
+    required this.appShortName,
+    required this.publisherName,
+    required this.logoAsset,
+    required this.logoDarkAsset,
+    required this.supportedLocales,
+    required this.defaultLocale,
+    required this.defaultThemeMode,
+    this.supportEmail,
+  });
+
+  final String appName;
+  final String appShortName;
+  final String publisherName;
+  final String logoAsset;
+  final String logoDarkAsset;
+  final List<Locale> supportedLocales;
+  final Locale defaultLocale;
+  final ThemeMode defaultThemeMode;
+  final String? supportEmail;
+
+  static const AppConfig current = AppConfig(
+    appName: 'Your App Name',
+    appShortName: 'YourApp',
+    publisherName: 'Your Company',
+    logoAsset: 'assets/branding/logo.png',
+    logoDarkAsset: 'assets/branding/logo_dark.png',
+    supportedLocales: [Locale('fr'), Locale('en')],
+    defaultLocale: Locale('fr'),
+    defaultThemeMode: ThemeMode.system,
+    supportEmail: 'support@example.com',
+  );
+}

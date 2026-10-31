@@ -1,0 +1,36 @@
+# Angular / Tailwind CSS v4
+node_modules/
+dist/
+.angular/
+.cache/
+.npm/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Proxy policy
+# proxy.conf.json should normally be committed.
+proxy.local.conf.json
+proxy.*.local.json
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test reports
+playwright-report/
+cypress/screenshots/
+cypress/videos/
+test-results/

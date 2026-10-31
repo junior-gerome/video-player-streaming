@@ -1,0 +1,39 @@
+# Spring Boot / Maven
+target/
+*.class
+*.log
+logs/
+tmp/
+temp/
+hs_err_pid*
+replay_pid*
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+application-local.yml
+application-secret.yml
+application-secrets.yml
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+credentials/
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Maven wrapper should generally remain versioned:
+# !mvnw
+# !mvnw.cmd
+# !.mvn/wrapper/maven-wrapper.properties

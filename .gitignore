@@ -1,0 +1,42 @@
+# Java / Gradle
+video-player-backend/build/
+video-player-backend/.gradle/
+video-player-backend/.idea/
+video-player-backend/bin/
+video-player-backend/*.iml
+video-player-backend/*.ipr
+video-player-backend/*.iws
+video-translator/backend/target/
+video-translator/backend/.idea/
+
+# Python Virtual Environments & Temporary Files
+video-player-backend/venv/
+video-player-backend/dub-tmp/
+video-player-backend/debug/
+video-translator/venv/
+video-translator/ai-service/__pycache__/
+*.pyc
+__pycache__/
+
+# Node / Angular
+video-player-frontend/node_modules/
+video-player-frontend/dist/
+video-player-frontend/.angular/
+video-translator/frontend/node_modules/
+video-translator/frontend/dist/
+video-translator/frontend/.angular/
+
+# Generated Media & Scratch artifacts
+video-player-backend/test_*
+video-player-backend/scratch_*
+*.wav
+*.mp3
+*.mp4
+*.zip
+.agents/
+
+# System & Environment
+.env
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,66 @@
+// shared/services/crud.service.ts
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { computed, inject, signal } from '@angular/core';
+import { Observable, catchError, map, tap, throwError } from 'rxjs';
+import { ApiResponse } from '../models/api-response.model';
+import { CrudState, idleCall, loadingCall } from '../models/crud.model';
+import { resolveErrorKey } from './error-messages';
+
+export abstract class CrudService<B extends { id: number | null }, F extends B> {
+  protected readonly http = inject(HttpClient);
+  protected readonly state = signal<CrudState<B, F>>({ items: [], selected: null, call: idleCall() });
+
+  readonly items = computed(() => this.state().items);
+  readonly selected = computed(() => this.state().selected);
+  readonly isLoading = computed(() => this.state().call.loading);
+  readonly errorKey = computed(() => this.state().call.errorKey);
+
+  protected constructor(protected readonly endpoint: string) {}
+
+  getAll(): Observable<B[]> {
+    return this.call(this.http.get<ApiResponse<B[]>>(this.endpoint), items => this.patch({ items }));
+  }
+
+  getById(id: number): Observable<F> {
+    return this.call(this.http.get<ApiResponse<F>>(`${this.endpoint}/${id}`), selected => this.patch({ selected }));
+  }
+
+  create(payload: Omit<F, 'id'>): Observable<F> {
+    return this.call(this.http.post<ApiResponse<F>>(this.endpoint, payload),
+      item => this.patch({ items: [...this.items(), item] }));
+  }
+
+  update(id: number, payload: F): Observable<F> {
+    return this.call(this.http.put<ApiResponse<F>>(`${this.endpoint}/${id}`, payload), updated => this.patch({
+      items: this.items().map(it => (it.id === id ? updated : it)),
+      selected: this.selected()?.id === id ? updated : this.selected(),
+    }));
+  }
+
+  delete(id: number): Observable<void> {
+    return this.call(this.http.delete<ApiResponse<void>>(`${this.endpoint}/${id}`), () => this.patch({
+      items: this.items().filter(it => it.id !== id),
+      selected: this.selected()?.id === id ? null : this.selected(),
+    }));
+  }
+
+  /** Appel standard : état de chargement, déballage de data, mise à jour, gestion d'erreur. */
+  protected call<T>(request: Observable<ApiResponse<T>>, onSuccess: (data: T) => void): Observable<T> {
+    this.patch({ call: loadingCall() });
+    return request.pipe(
+      map(response => response.data),
+      tap(data => { onSuccess(data); this.patch({ call: idleCall() }); }),
+      catchError((err: HttpErrorResponse) => this.fail(err)),
+    );
+  }
+
+  protected patch(partial: Partial<CrudState<B, F>>): void {
+    this.state.update(s => ({ ...s, ...partial }));
+  }
+
+  protected fail(err: HttpErrorResponse): Observable<never> {
+    const errorCode: string | null = err.error?.errorCode ?? null;
+    this.patch({ call: { loading: false, errorCode, errorKey: resolveErrorKey(errorCode, err.status) } });
+    return throwError(() => err);
+  }
+}

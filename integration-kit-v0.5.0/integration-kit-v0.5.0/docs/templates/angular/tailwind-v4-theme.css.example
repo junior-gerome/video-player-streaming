@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* Tailwind CSS v4 — dark mode piloté par data-theme sur <html>. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+  Source recommandée : DESIGN.md
+  Génération possible :
+  npx @google/design.md export DESIGN.md css-tailwind > src/styles/design-system.theme.css
+*/
+@theme {
+  --radius-brand-xs: 0.125rem;
+  --radius-brand-sm: 0.25rem;
+  --radius-brand-md: 0.375rem;
+  --radius-brand-lg: 0.5rem;
+  --shadow-brand-card: 0 10px 26px rgb(10 29 61 / 0.10), 0 2px 8px rgb(10 29 61 / 0.08);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #2563eb;
+  --color-on-primary: #ffffff;
+  --color-secondary: #64748b;
+  --color-on-secondary: #ffffff;
+  --color-tertiary: #14b8a6;
+  --color-on-tertiary: #042f2e;
+  --color-background: #f8fafc;
+  --color-on-background: #0f172a;
+  --color-surface: #ffffff;
+  --color-on-surface: #0f172a;
+  --color-outline: #cbd5e1;
+  --color-error: #dc2626;
+  --color-on-error: #ffffff;
+  --color-success: #15803d;
+  --color-on-success: #ffffff;
+  --color-warning: #b45309;
+  --color-on-warning: #ffffff;
+
+  --text-headline-lg: 32px;
+  --text-headline-md: 24px;
+  --text-body-lg: 18px;
+  --text-body-md: 16px;
+  --text-body-sm: 14px;
+
+  --leading-headline-lg: 40px;
+  --leading-headline-md: 32px;
+  --leading-body-lg: 28px;
+  --leading-body-md: 24px;
+  --leading-body-sm: 20px;
+
+  /* Arrondis plafonnés à 8 px (UI-RADIUS-AND-SHADOW-STANDARDS.md) */
+  --radius-sm: 0.25rem;  /* 4px */
+  --radius-md: 0.375rem; /* 6px */
+  --radius-lg: 0.5rem;   /* 8px */
+  --radius-xl: 0.5rem;   /* 8px : volontairement identique à lg */
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app-background: var(--color-background);
+  --app-foreground: var(--color-on-background);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-background: #020617;
+  --color-on-background: #e2e8f0;
+  --color-surface: #0f172a;
+  --color-on-surface: #e2e8f0;
+  --color-outline: #334155;
+  --color-primary: #60a5fa;
+  --color-on-primary: #0f172a;
+  --color-error: #f87171;
+  --color-on-error: #0f172a;
+  --color-success: #4ade80;
+  --color-on-success: #052e16;
+  --color-warning: #fbbf24;
+  --color-on-warning: #1c1917;
+  --app-background: var(--color-background);
+  --app-foreground: var(--color-on-background);
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--app-background);
+  color: var(--app-foreground);
+}

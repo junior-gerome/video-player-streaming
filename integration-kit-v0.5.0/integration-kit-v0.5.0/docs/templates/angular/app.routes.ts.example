@@ -1,0 +1,26 @@
+// src/app/app.routes.ts — layouts par persona, guards sur le parent, écrans chargés à la demande
+import { Routes } from '@angular/router';
+import { adminGuard } from './core/guards/admin.guard';
+import { authGuard } from './core/guards/auth.guard';
+
+export const routes: Routes = [
+  {
+    path: 'admin',
+    loadComponent: () => import('./features/admin/components/admin-layout/admin-layout').then(m => m.AdminLayout),
+    canActivate: [adminGuard],
+    children: [
+      { path: 'dashboard', loadComponent: () => import('./features/admin/components/dashboard/dashboard').then(m => m.Dashboard) },
+      { path: 'items', loadComponent: () => import('./features/items/components/item-list/item-list').then(m => m.ItemList) },
+      { path: 'items/new', loadComponent: () => import('./features/items/components/item-form/item-form').then(m => m.ItemForm) },
+      { path: 'items/:id', loadComponent: () => import('./features/items/components/item-form/item-form').then(m => m.ItemForm) },
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+    ],
+  },
+  {
+    path: 'user',
+    loadComponent: () => import('./features/user/components/user-layout/user-layout').then(m => m.UserLayout),
+    canActivate: [authGuard],
+    children: [ /* … */ ],
+  },
+  { path: '', redirectTo: '/user/dashboard', pathMatch: 'full' },
+];
