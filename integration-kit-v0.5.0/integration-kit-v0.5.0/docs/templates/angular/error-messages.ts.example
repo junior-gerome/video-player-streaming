@@ -1,6 +1,0 @@
-// shared/services/error-messages.ts
-export function resolveErrorKey(errorCode: string | null, httpStatus?: number): string {
-  if (errorCode) return `errors.${errorCode}`;
-  if (httpStatus === 0) return 'errors.network';
-  return 'errors.unexpected';
-}
