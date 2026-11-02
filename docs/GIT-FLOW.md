@@ -10,8 +10,9 @@ Ce dépôt respecte le standard **Git Flow** pour assurer la qualité, la traça
 | :--- | :--- | :--- |
 | `main` | Branche de production principale. Contient le projet complet stable et déployable. | Merge uniquement depuis `develop` ou `hotfix/*` avec tag de version (ex: `v1.0.0`). |
 | `develop` | Branche d'intégration continue des fonctionnalités (monorepo complet). | Reçoit les branches `feature/*` après validation des tests. |
-| `frontend` | **Branche dédiée Frontend** : isolée uniquement sur l'application Angular (`video-player-frontend`). | Permet le développement et déploiement autonome de l'interface utilisateur. |
-| `backend` | **Branche dédiée Backend** : isolée uniquement sur l'application Spring Boot & pipelines Python (`video-player-backend`). | Permet le développement et déploiement autonome des microservices et jobs IA. |
+| `frontend` | **Branche dédiée Frontend** : isolée exclusivement sur l'application Angular (`video-player-frontend`). | Permet le cycle de vie et déploiement autonome de l'interface utilisateur. |
+| `backend` | **Branche dédiée Backend** : isolée exclusivement sur Spring Boot & pipelines Python (`video-player-backend`). | Permet le cycle de vie et déploiement autonome des services de streaming et modèles IA. |
+| `docs` / `doc` | **Branche dédiée Documentation** : isolée exclusivement sur l'architecture, les spécifications produit et guides (`docs/`, `PRODUCT.md`, `DESIGN.md`). | Centralise la documentation technique et fonctionnelle. |
 | `feature/streaming-offline-dubbing` | Branche de développement de la fonctionnalité de doublage multilingue en streaming temps réel et traduction 100% hors-ligne. | Mergée dans `develop` via Pull Request / revue. |
 | `hotfix/*` | Correctifs d'urgence directement appliqués sur `main` puis reportés sur `develop`. | Merge dans `main` et `develop`. |
 
